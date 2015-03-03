@@ -17,6 +17,9 @@ module GenericDP where
     emb zero    = zero
     emb (suc n) = suc (emb n)
 
+    id : forall {l}{A : Set l} -> A -> A
+    id x = x
+
   module GenericTypes where
     open Prelude
 
@@ -69,7 +72,7 @@ module GenericDP where
     Ctx = Kind
 
     [_] : Kind -> Ctx
-    [ k ] = k
+    [_] = id
 
     [] = Star
 
@@ -96,7 +99,8 @@ module GenericDP where
     [[ C ]]Ctx = forall {k : Kind} -> k <- C -> Ty C [ k ] Star
 
     Args : forall (C : Ctx)(k : Kind) -> Set
-    Args C k = forall {k'} -> k' <- [ k ] -> Ty C [] k
+    Args C k = forall {k'} -> k' <- [ k ] -> Ty C [] k'
+
 
     module TyInterp {C : Ctx}(de : [[ C ]]Ctx) where
 
@@ -104,11 +108,24 @@ module GenericDP where
       infix 4 _:[_]
       infixl 4 _,_
 
-      _#_ : forall {C k} -> Ty C [] k -> Args C k -> Ty C [] Star
-      t # args = {!t!}
+      hd : forall (j k : Kind)(xs : Args C (j => k)) -> Ty C [] j
+      hd j k args = args here
 
-      _:[_] : forall {C k k'} -> Ty C [ k' ] k -> Args C k' -> Ty C [] k
-      t :[ args ] = {!!}
+      tl : forall (j k : Kind)(xs : Args C (j => k)) -> Args C k
+      tl j k args = \ x -> args (there x)
+
+      _#_ : forall {C k} -> Ty C [] k -> Args C k -> Ty C [] Star
+      _#_ {k = Star} t args = t
+      _#_ {k = k => k'} t args = _#_ {k = k'}{!t o (hd args)!}  {!tl args!}
+
+      _:[_] : forall {Del j k} -> Ty Del [ j ] k -> Args Del j -> Ty Del [] k
+      D x :[ args ] = D x
+      V x :[ args ] = args x
+      t o t' :[ args ] = (t :[ args ]) o (t' :[ args ])
+      Zero :[ args ] = Zero
+      One :[ args ] = One
+      t + t' :[ args ] = (t :[ args ]) + (t' :[ args ])
+      t * t' :[ args ] = (t :[ args ]) * (t' :[ args ])
 
       data [[_]]T : Ty C [] Star -> Set where
         con : forall {k}{x : Args C k}{v} -> [[ (de v):[ x ] ]]T -> [[ D v # x ]]T
@@ -135,7 +152,6 @@ module GenericDP where
 
       BushCode : Ty ((Star => Star) :: Star :: []) [ Star => Star ] Star
       BushCode = One + (V here) * ((D here) o (D here) o (V here))
-
 
       WBushCode : Ty ((Star => Star) :: Star :: []) [ Star ] Star
       WBushCode = (D here) o (D (there here))
