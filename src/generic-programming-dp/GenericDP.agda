@@ -108,15 +108,15 @@ module GenericDP where
       infix 4 _:[_]
       infixl 4 _,_
 
-      hd : forall (j k : Kind)(xs : Args C (j => k)) -> Ty C [] j
-      hd j k args = args here
+      hd : forall {j k : Kind}(xs : Args C (j => k)) -> Ty C [] j
+      hd args = args here
 
-      tl : forall (j k : Kind)(xs : Args C (j => k)) -> Args C k
-      tl j k args = \ x -> args (there x)
+      tl : forall {j k : Kind}(xs : Args C (j => k)) -> Args C k
+      tl args = \ x -> args (there x)
 
-      _#_ : forall {C k} -> Ty C [] k -> Args C k -> Ty C [] Star
+      _#_ : forall {k} -> Ty C [] k -> Args C k -> Ty C [] Star
       _#_ {k = Star} t args = t
-      _#_ {k = k => k'} t args = _#_ {k = k'}{!t o (hd args)!}  {!tl args!}
+      _#_ {k = j => k} t args = _#_ {k = k}(t o hd args )  (tl args)
 
       _:[_] : forall {Del j k} -> Ty Del [ j ] k -> Args Del j -> Ty Del [] k
       D x :[ args ] = D x
@@ -129,12 +129,16 @@ module GenericDP where
 
       data [[_]]T : Ty C [] Star -> Set where
         con : forall {k}{x : Args C k}{v} -> [[ (de v):[ x ] ]]T -> [[ D v # x ]]T
-        inl  : forall {S} T -> [[ S ]]T -> [[ S + T ]]T
-        inr  : forall {T} S -> [[ T ]]T -> [[ S + T ]]T
+        inl  : forall {S T} -> [[ S ]]T -> [[ S + T ]]T
+        inr  : forall {S T} -> [[ T ]]T -> [[ S + T ]]T
         void : [[ One ]]T
         _,_  : forall {S T} -> [[ S ]]T -> [[ T ]]T -> [[ S * T ]]T
 
-    module ExampleCodes where
+  module Examples where
+      open Encoding
+      open Prelude
+
+      -- some examples
 
       data Bush (A : Set) : Set where
         Nil : Bush A
@@ -148,8 +152,6 @@ module GenericDP where
       MBush : Ctx
       MBush = Star => Star :: Star :: []
 
-      -- little error on paper, in the second context the correct kind is Star rather than Star => Star...
-
       BushCode : Ty ((Star => Star) :: Star :: []) [ Star => Star ] Star
       BushCode = One + (V here) * ((D here) o (D here) o (V here))
 
@@ -161,7 +163,15 @@ module GenericDP where
       delW (there here) = WBushCode
       delW (there (there ()))
 
+      open TyInterp delW
 
-      -- constructors
+      -- constructors. problem: how to remove the unresolved metas?
 
-      --nil : forall {C k}(A : Ty C [] Star) -> [[ (D here) o A ]]T
+      nil : forall (A : Ty ((Star => Star) :: Star :: []) [] Star) -> [[ (D here) o A ]]T
+      nil A = con (inl void)
+
+      cons : forall (A : Ty ((Star => Star) :: Star :: []) [] Star)(x : [[ A ]]T)(b : [[ (D here) o ((D here) o A) ]]T) -> [[ (D here) o A ]]T
+      cons A x b = con (inr (x , b))
+
+      w : [[ (D here) o (D (there here)) ]]T -> [[ D (there here) ]]T
+      w = con
