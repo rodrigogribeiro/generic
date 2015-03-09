@@ -146,6 +146,19 @@ module Regular where
     notEqPop : forall {n}{G : Tel n}{T S : Reg n}(x y : [[ T ]] G) -> ((x == y) -> Zero) -> pop {S = S} x == pop y -> Zero
     notEqPop x .x neq refl = neq refl
 
+    notEqDef : forall {n}{G : Tel n}{S : Reg n}{T : Reg (suc n)}(x y : [[ T ]] (G :: S)) -> ((x == y) -> Zero) -> def x == def y -> Zero
+    notEqDef x .x n refl = n refl
+
+    notEqInl : forall {n}{G : Tel n}{T S : Reg n}(x y : [[ S ]] G) -> ((x == y) -> Zero) -> _==_ {A = [[ S `+ T ]] G}(inl {n}{T}{S}{G} x) (inl {n}{T}{S}{G} y) -> Zero
+    notEqInl x .x n₁ refl = n₁ refl
+
+    notEqInr : forall {n}{G : Tel n}{T S : Reg n}(x y : [[ T ]] G) -> ((x == y) -> Zero) -> _==_ {A = [[ S `+ T ]] G}(inr {n}{T}{S}{G} x) (inr {n}{T}{S}{G} y) -> Zero
+    notEqInr x .x n₁ refl = n₁ refl
+
+    notEqPair : forall {n}{G : Tel n}{T S : Reg n}(x x' : [[ S ]] G)(y y' : [[ T ]] G) -> (((x == x') -> Zero) + ((y == y') -> Zero)) -> pair x y == pair x' y' -> Zero
+    notEqPair x .x y .y (inl p) refl = p refl
+    notEqPair x .x y .y (inr p) refl = p refl
+
     notEqIn : forall {n}{G : Tel n}{F : Reg (suc n)}(x y : [[ F ]] (G :: Mu F)) -> ((x == y) -> Zero) -> In x == In y -> Zero
     notEqIn x .x neq refl = neq refl
 
@@ -158,20 +171,65 @@ module Regular where
     decideEq (pop x) (pop y) | no n = no (notEqPop x y n)
     decideEq (def x) (def y) with decideEq x y
     decideEq (def x) (def .x) | yes refl = yes refl
-    decideEq (def x) (def y) | no x₁ = {!!}
+    decideEq (def x) (def y) | no x₁ = no (notEqDef x y x₁)
     decideEq (inl x) (inl y) with decideEq x y
     decideEq (inl x) (inl .x) | yes refl = yes refl
-    decideEq (inl x) (inl y) | no x₁ = {!!}
+    decideEq (inl x) (inl y) | no x₁ = no (notEqInl x y x₁)
     decideEq (inl x) (inr y) = no (λ ())
     decideEq (inr x) (inl y) = no (λ ())
     decideEq (inr x) (inr y) with decideEq x y
     decideEq (inr x) (inr .x) | yes refl = yes refl
-    decideEq (inr x) (inr y) | no x₁ = {!!}
+    decideEq (inr x) (inr y) | no x₁ = no (notEqInr x y x₁)
     decideEq void void = yes refl
     decideEq (pair x x') (pair y y') with decideEq x y | decideEq x' y'
     decideEq (pair x x') (pair .x .x') | yes refl | yes refl = yes refl
-    decideEq (pair x x') (pair y y') | yes x₁ | no x₂ = {!!}
-    decideEq (pair x x') (pair y y') | no x₁ | k' = {!!}
+    decideEq (pair x x') (pair y y') | yes x₁ | no x₂ = no (notEqPair x y x' y' (inr x₂))
+    decideEq (pair x x') (pair y y') | no x₁ | k' = no (notEqPair x y x' y' (inl x₁))
     decideEq (In x) (In y) with decideEq x y
     decideEq (In x) (In .x) | yes refl = yes refl
     decideEq (In x) (In y) | no n = no (notEqIn x y n)
+
+  module GenericMap where
+    open Prelude hiding (List)
+    open Regular
+
+    -- representing type constructors
+
+    List : forall {n} -> Reg (suc n)
+    List = Mu (`1 `+ (`wk `Z `* `Z))
+
+    -- list constructors
+
+    nil : forall {n}{G : Tel (suc n)} -> [[ List ]] G
+    nil = In (inl void)
+
+    cons : forall {n}{G : Tel (suc n)}(a : [[ `Z ]] G)(as : [[ List ]] G) -> [[ List ]] G
+    cons a as = In (inr (pair (pop a) (top as)))
+
+    -- list concatenation
+
+    _++_ : forall {n}{G : Tel (suc n)}(as bs : [[ List ]] G) -> [[ List ]] G
+    In (inl void) ++ bs = bs
+    In (inr (pair (pop a) (top as))) ++ bs = cons a (as ++ bs)
+
+    -- map
+
+    data Morph : forall {n}(G D : Tel n) -> Set where
+      mId : forall {n}{G : Tel n} -> Morph G G
+      mFun : forall {n}{S T : Reg n}{G D : Tel n}(m : Morph G D)(f : [[ S ]] G -> [[ T ]] D) -> Morph (G :: S) (D :: T)
+      mMap : forall {n}{T : Reg n}{G D : Tel n} -> Morph G D -> Morph (G :: T) (D :: T)
+
+
+    gMap : forall {n}{T : Reg n}{G D : Tel n}(m : Morph G D) -> [[ T ]] G -> [[ T ]] D
+    gMap mId (top t) = top t
+    gMap (mFun m f) (top t) = top (f t)
+    gMap (mMap m) (top t) = top (gMap m t)
+    gMap mId (pop t) = pop t
+    gMap (mFun m f) (pop t) = pop (gMap m t)
+    gMap (mMap m) (pop t) = pop (gMap m t)
+    gMap m (def t) = def (gMap (mMap m) t)
+    gMap m (inl t) = inl (gMap m t)
+    gMap m (inr t) = inr (gMap m t)
+    gMap m void = void
+    gMap m (pair t t') = pair (gMap m t) (gMap m t')
+    gMap m (In t) = In (gMap (mMap m) t)
