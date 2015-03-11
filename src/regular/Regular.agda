@@ -141,9 +141,9 @@ module Regular where
     minus (In (inr n)) (In (inl void)) = In (inr n)
     minus (In (inr (top n))) (In (inr (top m))) = minus n m
 
---    div : forall {k}{G : Tel k}(n m : [[ `Nat ]] G) -> [[ `Nat ]] G
---    div (In (inl void)) m = m
---    div (In (inr (top n))) m = su (div (minus n m) m)
+    --div : forall {k}{G : Tel k}(n m : [[ `Nat ]] G) -> [[ `Nat ]] G
+    --div (In (inl void)) m = m
+    --div (In (inr (top n))) m = su (div (minus n m) m)
 
   module GenericEq where
     open Regular
