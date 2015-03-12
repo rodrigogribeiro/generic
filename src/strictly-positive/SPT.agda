@@ -1,6 +1,6 @@
 module SPT where
 
-  -- code for exploring regular tree types
+  -- code for universes for strictly positive families
 
   module Finite where
 
