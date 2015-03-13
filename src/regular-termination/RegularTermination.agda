@@ -6,14 +6,21 @@ module RegularTermination where
 
     data Zero : Set where
 
+    magic : forall {A : Set} -> Zero -> A
+    magic ()
+
     record One : Set where
-      constructor <>
+       constructor <>
 
     data Two : Set where tt ff : Two
 
     So : Two -> Set
     So tt = One
     So ff = Zero
+
+    instance
+      unit : One
+      unit = _
 
     record <<_>> (P : Set) : Set where
       constructor !
@@ -134,10 +141,30 @@ module RegularTermination where
     (# x) <= inf = tt
     suc o <= (# x) = ff
     suc o <= suc o' = o <= o'
-    suc o <= inf = ff
+    suc o <= inf = tt
     inf <= (# x) = ff
-    inf <= suc o' = ff
+    inf <= suc o' = <| inf eq? o' |>
     inf <= inf = tt
+
+    instance
+      <=-refl : forall {o} -> So (o <= o)
+      <=-refl {# x} = <>
+      <=-refl {suc o} = <=-refl {o}
+      <=-refl {inf} = <>
+
+    instance
+      <=-suc : forall {o} -> So (o <= (suc o))
+      <=-suc {# x} with Nat-eq-dec x x
+      <=-suc {# x} | yes refl = <>
+      <=-suc {# x} | no x₁ = magic (x₁ refl)
+      <=-suc {suc o} = <=-suc {o}
+      <=-suc {inf} = <>
+
+    instance
+      <=-inf : forall {o} -> So (o <= inf)
+      <=-inf {# x} = <>
+      <=-inf {suc o} = <>
+      <=-inf {inf} = <>
 
   module Universe where
 
@@ -177,16 +204,16 @@ module RegularTermination where
     `Nat : forall {n} -> Reg n
     `Nat = Mu (`1 `+ `Z)
 
-    ze : forall {n o}{G : Tel n} -> [[ `Nat ]] G ^ (suc o)
-    ze {o = o} = In {o = o} {o' = suc o} (inl void)
+    ze : forall {n o}{G : Tel n} -> [[ `Nat ]] G ^ o
+    ze {o = o} = In {o = o} {o' = o}(inl void) {{ <=-refl {o} }}
 
     su : forall {n o}{G : Tel n}(m : [[ `Nat ]] G ^ o) -> [[ `Nat ]] G ^ (suc o)
-    su m = {!!} -- In (inr (top m))
+    su {o = o} m = In {o' = suc o}(inr (top m)) {{ <=-suc {o} }}
 
-    -- minus : forall {k o}{G : Tel k} -> [[ `Nat ]] G ^ o -> [[ `Nat ]] G ^ inf -> [[ `Nat ]] G ^ o
-    -- minus (In (inl void)) m = In (inl void)
-    -- minus (In (inr n)) (In (inl void)) = In (inr n)
-    -- minus (In (inr (top n))) (In (inr (top m))) = minus n m
+    minus : forall {k o}{G : Tel k} -> [[ `Nat ]] G ^ o -> [[ `Nat ]] G ^ inf -> [[ `Nat ]] G ^ o
+    minus {o = o}(In (inl void)) m = In {o = o}(inl void) {{ <=-refl {o} }}
+    minus (In (inr n)) (In (inl void)) = In (inr n)
+    minus (In (inr (top n))) (In (inr (top m))) = {!minus n m!} -- minus n m
 
     -- div : forall {k o}{G : Tel k}(n m : [[ `Nat ]] G ^ o) -> [[ `Nat ]] G ^ o
     -- div (In (inl void)) m = m
