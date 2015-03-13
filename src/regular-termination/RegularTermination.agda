@@ -5,8 +5,25 @@ module RegularTermination where
   module Finite where
 
     data Zero : Set where
-    data One : Set where
-      tt : One
+
+    record One : Set where
+      constructor <>
+
+    data Two : Set where tt ff : Two
+
+    So : Two -> Set
+    So tt = One
+    So ff = Zero
+
+    record <<_>> (P : Set) : Set where
+      constructor !
+      field
+        {{ prf }} : P
+
+    _=>_ : Set -> Set -> Set
+    P => T = {{ p : P }} -> T
+
+    infixr 3 _=>_
 
     record Sig (A : Set)(B : A -> Set) : Set where
        constructor _,_
@@ -60,6 +77,10 @@ module RegularTermination where
       yes : A -> Dec A
       no  : (A -> Zero) -> Dec A
 
+    <|_|> : forall{l}{A : Set l} -> Dec A -> Two
+    <| yes _ |> = tt
+    <| no _ |>  = ff
+
     private
       suc-eq : forall {n m : Nat} -> (n == m -> Zero) -> _==_ {A = Nat} (suc n) (suc m) -> Zero
       suc-eq x refl = x refl
@@ -107,61 +128,66 @@ module RegularTermination where
 
     -- ordinal partial order
 
-    data _<=_ : Ord -> Ord -> Set where
-      refl  : forall {p} -> p <= p
-      suc   : forall {p} -> p <= suc p
-      inf   : forall {p} -> p <= inf
-
+    _<=_ : Ord -> Ord -> Two
+    (# x) <= (# x₁) = tt
+    (# x) <= suc o' = <| (# x) eq? o' |>
+    (# x) <= inf = tt
+    suc o <= (# x) = ff
+    suc o <= suc o' = o <= o'
+    suc o <= inf = ff
+    inf <= (# x) = ff
+    inf <= suc o' = ff
+    inf <= inf = tt
 
   module Universe where
 
     open Prelude
     open Ordinal
 
-    data Reg : Nat -> Ord -> Set where
-      `Z : forall {n o} -> Reg n o
-      `wk : forall {n o}(s : Reg n o) -> Reg (suc n) o
-      `let : forall {n o}(s : Reg n o)(t : Reg (suc n) o) -> Reg n o
-      `0 : forall {n o} -> Reg n o
-      `1 : forall {n o} -> Reg n o
-      _`+_ : forall {n o} -> (s t : Reg n o) -> Reg n o
-      _`*_ : forall {n o} -> (s t : Reg n o) -> Reg n o
-      Mu : forall {n o}(f : Reg (suc n) o) -> Reg n (suc o)
+    data Reg : Nat -> Set where
+      `Z : forall {n} -> Reg n
+      `wk : forall {n}(s : Reg n) -> Reg (suc n)
+      `let : forall {n}(s : Reg n)(t : Reg (suc n)) -> Reg n
+      `0 : forall {n} -> Reg n
+      `1 : forall {n} -> Reg n
+      _`+_ : forall {n} -> (s t : Reg n) -> Reg n
+      _`*_ : forall {n} -> (s t : Reg n) -> Reg n
+      Mu : forall {n}(f : Reg (suc n)) -> Reg n
 
     -- telescopes
 
-    data Tel : Nat -> Ord -> Set where
-      []   : forall {o} -> Tel zero o
-      _::_ : forall {n o o'}(t : Tel n o')(r : Reg n o) -> Tel (suc n) o
+    data Tel : Nat -> Set where
+      []   : Tel zero
+      _::_ : forall {n}(t : Tel n)(r : Reg n) -> Tel (suc n)
 
     -- interpreting types
 
-    infix 1 [[_]]_
+    infix 1 [[_]]_^_
 
-    data [[_]]_ : forall {n o o'} -> Reg n o -> Tel n o' -> Set where
-      top : forall {n o o'}{T : Reg n o}{G : Tel n o'} (t : [[ T ]] G) -> [[ `Z {o = o} ]] (G :: T)
-      pop : forall {n o o'}{T S : Reg n o}{G : Tel n o'}(t : [[ T ]] G) -> [[ `wk T ]] (G :: S)
-      def : forall {n o o'}{T : Reg (suc n) o}{S : Reg n o}{G : Tel n o'}(t : [[ T ]] (G :: S)) -> [[ `let S T ]] G
-      inl : forall {n o o'}{T S : Reg n o}{G : Tel n o'}(s : [[ S ]] G) -> [[ S `+ T ]] G
-      inr : forall {n o o'}{T S : Reg n o}{G : Tel n o'}(t : [[ T ]] G) -> [[ S `+ T ]] G
-      void : forall {n o o'}{G : Tel n o} -> [[ `1 {o = o'} ]] G
-      pair : forall {n o o'}{T S : Reg n o}{G : Tel n o'}(s : [[ S ]] G)(t : [[ T ]] G) -> [[ S `* T ]] G
-      In   : forall {n o o'}{F : Reg (suc n) (suc o)}{G : Tel n o'}(x : [[ F ]] (G :: (Mu F))) -> [[ Mu F ]] G
+    data [[_]]_^_ : forall {n} -> Reg n -> Tel n -> Ord -> Set where
+      top : forall {n o}{T : Reg n}{G : Tel n} (t : [[ T ]] G ^ o) -> [[ `Z ]] (G :: T) ^ o
+      pop : forall {n o}{T S : Reg n}{G : Tel n}(t : [[ T ]] G ^ o) -> [[ `wk T ]] (G :: S) ^ o
+      def : forall {n o}{T : Reg (suc n)}{S : Reg n}{G : Tel n}(t : [[ T ]] (G :: S) ^ o) -> [[ `let S T ]] G ^ o
+      inl : forall {n o}{T S : Reg n}{G : Tel n}(s : [[ S ]] G ^ o) -> [[ S `+ T ]] G ^ o
+      inr : forall {n o}{T S : Reg n}{G : Tel n}(t : [[ T ]] G ^ o) -> [[ S `+ T ]] G ^ o
+      void : forall {n o}{G : Tel n} -> [[ `1 ]] G ^ o
+      pair : forall {n o}{T S : Reg n}{G : Tel n}(s : [[ S ]] G ^ o)(t : [[ T ]] G ^ o) -> [[ S `* T ]] G ^ o
+      In   : forall {n o o'}{F : Reg (suc n)}{G : Tel n}(x : [[ F ]] (G :: (Mu F)) ^ o) -> (So (o <= o')) => ([[ Mu F ]] G ^ o')
 
-    `Nat : forall {n o} -> Reg n (suc o)
+    `Nat : forall {n} -> Reg n
     `Nat = Mu (`1 `+ `Z)
 
-    ze : forall {n o o'}{G : Tel n o} -> [[ `Nat {o = suc o'} ]] G
-    ze = In (inl void)
+    ze : forall {n o}{G : Tel n} -> [[ `Nat ]] G ^ (suc o)
+    ze {o = o} = In {o = o} {o' = suc o} (inl void)
 
-    su : forall {n o o'}{G : Tel n o}(m : [[ `Nat {o = suc o'} ]] G) -> [[ `Nat ]] G
-    su m = In (inr {!pair!})
+    su : forall {n o}{G : Tel n}(m : [[ `Nat ]] G ^ o) -> [[ `Nat ]] G ^ (suc o)
+    su m = {!!} -- In (inr (top m))
 
-    -- minus : forall {k o}{G : Tel k o}(n m : [[ `Nat ]] G) -> [[ `Nat ]] G
-    -- minus (In (inl void)) m = m
+    -- minus : forall {k o}{G : Tel k} -> [[ `Nat ]] G ^ o -> [[ `Nat ]] G ^ inf -> [[ `Nat ]] G ^ o
+    -- minus (In (inl void)) m = In (inl void)
     -- minus (In (inr n)) (In (inl void)) = In (inr n)
     -- minus (In (inr (top n))) (In (inr (top m))) = minus n m
 
-    -- div : forall {k}{G : Tel k}(n m : [[ `Nat ]] G) -> [[ `Nat ]] G
+    -- div : forall {k o}{G : Tel k}(n m : [[ `Nat ]] G ^ o) -> [[ `Nat ]] G ^ o
     -- div (In (inl void)) m = m
     -- div (In (inr (top n))) m = su (div (minus n m) m)
